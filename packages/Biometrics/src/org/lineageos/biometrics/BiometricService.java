@@ -635,13 +635,15 @@ public class BiometricService extends Service
 
     /**
      * Read the Screen-Off UDFPS setting for the current user.
-     * Defaults to OFF (0) if not explicitly set.
+     * Uses the same default as Settings when it was never set.
      */
     private boolean isScreenOffUdfpsEnabled() {
+        final boolean defEnabled = getResources().getBoolean(
+                com.android.internal.R.bool.config_screen_off_udfps_default_on);
         return Settings.Secure.getIntForUser(
                 getContentResolver(),
                 SETTING_SCREEN_OFF_UDFPS,
-                0 /* default off */,
+                defEnabled ? 1 : 0,
                 UserHandle.USER_CURRENT) != 0;
     }
 
