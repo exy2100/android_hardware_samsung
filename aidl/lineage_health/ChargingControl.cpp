@@ -7,6 +7,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 
 #define LOG_TAG "vendor.lineage.health-service.samsung"
 
@@ -21,6 +22,9 @@ ndk::ScopedAStatus ChargingControl::getChargingEnabled(bool* _aidl_return) {
         LOG(ERROR) << "Failed to read current charging enabled value";
         return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
     }
+
+    // sec_battery prints the node with a trailing newline ("1\n").
+    content = android::base::Trim(content);
 
     if (content == "1") {
         *_aidl_return = true;
