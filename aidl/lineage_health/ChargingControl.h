@@ -10,6 +10,7 @@
 #include <aidl/vendor/lineage/health/ChargingLimitInfo.h>
 
 #define CHARGING_ENABLED_NODE "/sys/class/power_supply/battery/charging_enabled"
+#define CHARGING_LIMIT_NODE "/sys/class/power_supply/battery/batt_full_capacity"
 
 namespace aidl {
 namespace vendor {

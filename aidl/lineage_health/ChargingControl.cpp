@@ -7,6 +7,8 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
+#include <android-base/strings.h>
 
 #define LOG_TAG "vendor.lineage.health-service.samsung"
 
@@ -21,6 +23,9 @@ ndk::ScopedAStatus ChargingControl::getChargingEnabled(bool* _aidl_return) {
         LOG(ERROR) << "Failed to read current charging enabled value";
         return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
     }
+
+    // sec_battery prints the node with a trailing newline ("1\n").
+    content = android::base::Trim(content);
 
     if (content == "1") {
         *_aidl_return = true;
@@ -51,6 +56,33 @@ ndk::ScopedAStatus ChargingControl::setChargingDeadline(int64_t /* deadline */) 
     return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
 }
 
+#ifdef HEALTH_CHARGING_CONTROL_SUPPORTS_LIMIT
+ndk::ScopedAStatus ChargingControl::getChargingLimit(ChargingLimitInfo* _aidl_return) {
+    std::string content;
+    if (!android::base::ReadFileToString(CHARGING_LIMIT_NODE, &content, true)) {
+        LOG(ERROR) << "Failed to read current charging limit";
+        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+    }
+
+    if (!android::base::ParseInt(android::base::Trim(content), &_aidl_return->max)) {
+        LOG(ERROR) << "Unknown charging limit " << content;
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+    }
+
+    return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus ChargingControl::setChargingLimit(const ChargingLimitInfo& limit) {
+    // sec_battery keeps the charger powering the device at the limit and recharges 2% below it,
+    // so there is no min to set. 100 (or 0) removes the limit.
+    if (!android::base::WriteStringToFile(std::to_string(limit.max), CHARGING_LIMIT_NODE, true)) {
+        LOG(ERROR) << "Failed to write to charging limit node: " << strerror(errno);
+        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+    }
+
+    return ndk::ScopedAStatus::ok();
+}
+#else
 ndk::ScopedAStatus ChargingControl::getChargingLimit(ChargingLimitInfo* /* _aidl_return */) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
 }
@@ -58,13 +90,19 @@ ndk::ScopedAStatus ChargingControl::getChargingLimit(ChargingLimitInfo* /* _aidl
 ndk::ScopedAStatus ChargingControl::setChargingLimit(const ChargingLimitInfo& /* limit */) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
 }
+#endif
 
 ndk::ScopedAStatus ChargingControl::getSupportedMode(int* _aidl_return) {
     if (access(CHARGING_ENABLED_NODE, O_RDWR)) {
         LOG(ERROR) << "Can't access " << CHARGING_ENABLED_NODE << ": " << strerror(errno);
     } else {
-        *_aidl_return = static_cast<int>(ChargingControlSupportedMode::TOGGLE) |
-                        static_cast<int>(ChargingControlSupportedMode::BYPASS);
+        *_aidl_return = static_cast<int>(ChargingControlSupportedMode::TOGGLE);
+#ifdef HEALTH_CHARGING_CONTROL_SUPPORTS_BYPASS
+        *_aidl_return |= static_cast<int>(ChargingControlSupportedMode::BYPASS);
+#endif
+#ifdef HEALTH_CHARGING_CONTROL_SUPPORTS_LIMIT
+        *_aidl_return |= static_cast<int>(ChargingControlSupportedMode::LIMIT);
+#endif
     }
     return ndk::ScopedAStatus::ok();
 }
